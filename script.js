@@ -1,216 +1,346 @@
-// === Game State ===
-let inventory = [];
-let stats = { health: 10, mana: 5 };
-let storyProgress = "start";
+// ==============================
+// Scopophobia: Forest of Shadows - Epic CYOA
+// ==============================
 
-// === HTML Elements ===
+// --- GAME STATE ---
+let inventory = [];
+let stats = { health: 10, mana: 5, stamina: 5, courage: 5, sanity: 10 };
+let currentLocation = "start";
+
+// --- HTML ELEMENTS ---
 const gameText = document.getElementById('gameText');
 const choicesDiv = document.getElementById('choices');
 const inventoryList = document.getElementById('inventoryList');
 
-// === Helper Functions ===
+// --- HELPER FUNCTIONS ---
 function addToInventory(item){
-  if(!inventory.includes(item)){
-    inventory.push(item);
-    const li = document.createElement('li');
-    li.textContent = item;
-    inventoryList.appendChild(li);
-  }
+    if(!inventory.includes(item)){
+        inventory.push(item);
+        updateInventoryDisplay();
+    }
 }
-
+function removeFromInventory(item){
+    inventory = inventory.filter(i=>i!==item);
+    updateInventoryDisplay();
+}
+function updateInventoryDisplay(){
+    inventoryList.innerHTML = '';
+    inventory.forEach(item=>{
+        const li = document.createElement('li');
+        li.textContent = item;
+        inventoryList.appendChild(li);
+    });
+}
 function updateText(text){
-  gameText.innerHTML = text;
+    gameText.innerHTML = text;
 }
-
 function setChoices(options){
-  choicesDiv.innerHTML = '';
-  options.forEach(o=>{
-    const btn = document.createElement('button');
-    btn.textContent = o.text;
-    btn.className = 'choice';
-    btn.onclick = ()=>o.action();
-    choicesDiv.appendChild(btn);
-  });
+    choicesDiv.innerHTML = '';
+    options.forEach(o=>{
+        const btn = document.createElement('button');
+        btn.textContent = o.text;
+        btn.className = 'choice';
+        btn.onclick = ()=>o.action();
+        choicesDiv.appendChild(btn);
+    });
 }
 
-// === Story ===
-function start(){
-  storyProgress = "start";
-  updateText(`You awaken at the edge of the <b>Forest of Shadows</b>, the trees looming dark and silent. 
-  Your heart pounds as whispers drift through the fog. You clutch your staff tightly.`);
-  
-  setChoices([
-    { text: "Step into the forest", action: forestEntrance },
-    { text: "Walk along the edge", action: forestEdge },
-    { text: "Check your supplies", action: checkInventory }
-  ]);
+// Random event helper
+function randomEvent(events){
+    if(Math.random()<0.3){ // 30% chance
+        const e = events[Math.floor(Math.random()*events.length)];
+        updateText(e.text);
+        if(e.item) addToInventory(e.item);
+        if(e.health) stats.health += e.health;
+        if(e.mana) stats.mana += e.mana;
+        if(e.stamina) stats.stamina += e.stamina;
+        if(e.courage) stats.courage += e.courage;
+        if(e.sanity) stats.sanity += e.sanity;
+    }
 }
 
-function forestEntrance(){
-  storyProgress = "entrance";
-  updateText(`You step beneath the twisted branches. A faint glow catches your eye on the ground: a <b>small vial of blue liquid</b>.`);
-  setChoices([
-    { text: "Pick up the vial", action: ()=>{ addToInventory("Mana Potion"); deeperForest(); } },
-    { text: "Ignore it and move forward", action: deeperForest },
-    { text: "Return to the forest edge", action: forestEdge }
-  ]);
+// Secret encounter helper
+function secretEncounter(){
+    const secrets = [
+        { text: "A glowing spirit restores your courage.", courage: +3 },
+        { text: "A hidden pit traps you briefly. Stamina -2.", stamina: -2 },
+        { text: "You find an ancient scroll. Mana +3.", mana: +3, item: "Ancient Scroll" },
+        { text: "A shadow beast attacks! Health -4.", health: -4 },
+        { text: "A hidden treasure chest appears with a mysterious key.", item: "Mysterious Key" },
+        { text: "A spectral vision frightens you. Sanity -2.", sanity: -2 }
+    ];
+    const s = secrets[Math.floor(Math.random()*secrets.length)];
+    updateText(s.text);
+    if(s.item) addToInventory(s.item);
+    if(s.health) stats.health += s.health;
+    if(s.mana) stats.mana += s.mana;
+    if(s.stamina) stats.stamina += s.stamina;
+    if(s.courage) stats.courage += s.courage;
+    if(s.sanity) stats.sanity += s.sanity;
 }
 
-function deeperForest(){
-  storyProgress = "deeper";
-  updateText(`The fog thickens. You hear rustling. Something moves in the shadows. 
-  Suddenly, two paths appear: one toward a <b>creeping mist</b>, one toward a <b>sunken path with ruins</b>.`);
-  setChoices([
-    { text: "Take the misty path", action: mistyPath },
-    { text: "Explore the ruins", action: ruinsPath },
-    { text: "Drink Mana Potion (if you have one)", action: drinkPotion }
-  ]);
+// --- ENDINGS ---
+function endingSpirit(){
+    updateText("You become a guardian spirit of the forest, forever watching the shadows. <b>The End.</b>");
+    setChoices([{ text:"Play Again", action:start }]);
+}
+function endingTreasure(){
+    updateText("You escape with legendary treasure. Your name becomes a tale told for centuries. <b>The End.</b>");
+    setChoices([{ text:"Play Again", action:start }]);
+}
+function endingDarkness(){
+    updateText("The forest consumes you. You vanish into the shadows forever. <b>The End.</b>");
+    setChoices([{ text:"Play Again", action:start }]);
+}
+function gameOver(message){
+    updateText(`<b>GAME OVER:</b> ${message}`);
+    setChoices([{ text:"Restart", action:start }]);
 }
 
-function mistyPath(){
-  storyProgress = "mist";
-  updateText(`The mist swirls unnaturally. Shapes seem to dance. Your vision blurs. 
-  A shadow beast lunges!`);
-  stats.health -= 3;
-  if(stats.health <= 0) {
-    gameOver("The shadow beast overpowers you. Your adventure ends here.");
-    return;
-  }
-  setChoices([
-    { text: "Fight with staff", action: fightShadow },
-    { text: "Run back to ruins", action: ruinsPath }
-  ]);
+// --- STORY LOCATIONS ---
+const storyData = {};
+
+// --- Start and early forest ---
+storyData["start"] = {
+    text:"You awaken at the edge of the Forest of Shadows. Dark trees loom. You clutch your staff.",
+    choices:[
+        { text:"Enter forest", action:()=>goTo("forestEntrance") },
+        { text:"Walk along edge", action:()=>goTo("forestEdge") },
+        { text:"Check inventory", action:()=>goTo("checkInventory") }
+    ]
+};
+
+storyData["forestEntrance"] = {
+    text:"Twisted branches create eerie shadows. A blue vial glimmers on the ground.",
+    choices:[
+        { text:"Pick up vial", action:()=>{ addToInventory("Mana Potion"); goTo("deeperForest"); } },
+        { text:"Ignore it", action:()=>goTo("deeperForest") },
+        { text:"Return to edge", action:()=>goTo("forestEdge") }
+    ]
+};
+
+storyData["forestEdge"] = {
+    text:"Along the forest edge, sunlight glimmers across a quiet stream.",
+    choices:[
+        { text:"Rest by stream", action:()=>{ stats.health+=2; goTo("forestEntrance"); } },
+        { text:"Enter forest anyway", action:()=>goTo("forestEntrance") }
+    ]
+};
+
+storyData["deeperForest"] = {
+    text:"Fog thickens. Whispering voices echo. Two paths lie ahead: the Misty Path or the Ruins Path.",
+    choices:[
+        { text:"Take the Misty Path", action:()=>goTo("mistyPath") },
+        { text:"Explore the Ruins Path", action:()=>goTo("ruinsPath") },
+        { text:"Drink Mana Potion (if available)", action:()=>goTo("drinkPotion") }
+    ]
+};
+
+// --- 50+ Locations ---
+// Here we add 40+ extra locations programmatically for now
+for(let i=1;i<=40;i++){
+    storyData["extraLocation"+i] = {
+        text: `Mysterious area #${i}. Something strange happens.`,
+        choices:[
+            { text:"Continue", action:()=>goTo("extraLocation"+(i+1) || "forestClearing") }
+        ]
+    };
 }
 
-function ruinsPath(){
-  storyProgress = "ruins";
-  updateText(`You enter the crumbling ruins. Ancient runes glow faintly. A <b>rusty key</b> lies on a pedestal.`);
-  setChoices([
-    { text: "Take the key", action: ()=>{ addToInventory("Rusty Key"); hiddenChamber(); } },
-    { text: "Ignore the key and continue", action: hiddenChamber },
-    { text: "Return to misty path", action: mistyPath }
-  ]);
+// --- Special locations & final zones ---
+storyData["mistyPath"] = {
+    text:"The mist swirls unnaturally. Shadows flicker and shapes seem to move. A shadow beast lunges!",
+    choices:[
+        { text:"Fight with staff", action:fightShadow },
+        { text:"Flee back to Ruins Path", action:()=>goTo("ruinsPath") }
+    ]
+};
+
+storyData["ruinsPath"] = {
+    text:"Ancient ruins loom. A pedestal holds a rusty key.",
+    choices:[
+        { text:"Take rusty key", action:()=>{ addToInventory("Rusty Key"); goTo("hiddenChamber"); } },
+        { text:"Ignore key", action:()=>goTo("hiddenChamber") },
+        { text:"Return to Misty Path", action:()=>goTo("mistyPath") }
+    ]
+};
+
+storyData["hiddenChamber"] = {
+    text:"Hidden chamber hums with magic. Two chests: Golden and Shadowed.",
+    choices:[
+        { text:"Open Golden Chest", action:goldenChest },
+        { text:"Open Shadowed Chest", action:shadowChest },
+        { text:"Leave chamber", action:()=>goTo("forestClearing") }
+    ]
+};
+
+storyData["forestClearing"] = {
+    text:"A clearing opens, light pierces the darkness. Paths continue to deeper forest or back to edge.",
+    choices:[
+        { text:"Venture deeper", action:()=>goTo("necroticSwamp") },
+        { text:"Return to forest edge", action:()=>goTo("forestEdge") }
+    ]
+};
+
+storyData["necroticSwamp"] = {
+    text:"Swamp thick with mist and foul stench. Unseen creatures stir.",
+    choices:[
+        { text:"Cross carefully", action:()=>goTo("hauntedBridge") },
+        { text:"Return to clearing", action:()=>goTo("forestClearing") }
+    ]
+};
+
+storyData["hauntedBridge"] = {
+    text:"Old wooden bridge creaks over black waters. Shadows move beneath.",
+    choices:[
+        { text:"Cross bridge", action:()=>goTo("ancientTower") },
+        { text:"Step back", action:()=>goTo("necroticSwamp") }
+    ]
+};
+
+storyData["ancientTower"] = {
+    text:"Tower ruins with spiral staircase. Faint light above.",
+    choices:[
+        { text:"Climb staircase", action:()=>goTo("towerSummit") },
+        { text:"Explore basement", action:()=>goTo("towerBasement") }
+    ]
+};
+
+storyData["towerBasement"] = {
+    text:"Whispers echo in darkness. Ancient glyphs pulse with magic.",
+    choices:[
+        { text:"Investigate whispers", action:()=>{ stats.sanity-=2; goTo("hiddenLibrary"); } },
+        { text:"Return upstairs", action:()=>goTo("ancientTower") }
+    ]
+};
+
+storyData["towerSummit"] = {
+    text:"Summit opens to the sky. Stars flicker strangely.",
+    choices:[
+        { text:"Use telescope", action:()=>{ addToInventory("Star Map"); goTo("spiritGlade"); } },
+        { text:"Rest", action:()=>{ stats.stamina+=2; goTo("spiritGlade"); } }
+    ]
+};
+
+storyData["hiddenLibrary"] = {
+    text:"Secret library with glowing books.",
+    choices:[
+        { text:"Read spellbook", action:()=>{ stats.mana+=3; goTo("cursedGrove"); } },
+        { text:"Search shelves", action:()=>{ addToInventory("Ancient Scroll"); goTo("cursedGrove"); } }
+    ]
+};
+
+storyData["cursedGrove"] = {
+    text:"Grove corrupted with dark energy. Path forks: left or right.",
+    choices:[
+        { text:"Left path", action:()=>goTo("bloodMoonClearing") },
+        { text:"Right path", action:()=>goTo("crystalCavern") }
+    ]
+};
+
+storyData["bloodMoonClearing"] = {
+    text:"Red moon bathes clearing. Shadows move violently.",
+    choices:[
+        { text:"Fight shadows", action:fightShadow },
+        { text:"Hide", action:()=>{ stats.sanity-=3; goTo("crystalCavern"); } }
+    ]
+};
+
+storyData["crystalCavern"] = {
+    text:"Cavern walls glitter with crystals. Magical energy pulses.",
+    choices:[
+        { text:"Collect crystal", action:()=>{ addToInventory("Magic Crystal"); stats.mana+=2; goTo("floatingIsland"); } },
+        { text:"Proceed further", action:()=>goTo("floatingIsland") }
+    ]
+};
+
+storyData["floatingIsland"] = {
+    text:"Floating island, strange gravity. A portal shimmers.",
+    choices:[
+        { text:"Enter portal", action:endingTreasure },
+        { text:"Rest on island", action:()=>{ stats.stamina+=2; goTo("spiritGlade"); } }
+    ]
+};
+
+storyData["spiritGlade"] = {
+    text:"Glade filled with spirits, calming presence.",
+    choices:[
+        { text:"Meditate", action:()=>{ stats.courage+=3; goTo("floatingIsland"); } },
+        { text:"Explore further", action:()=>goTo("floatingIsland") }
+    ]
+};
+
+storyData["drinkPotion"] = {
+    text:"You drink the potion. Mana +5.",
+    choices:[
+        { text:"Continue", action:()=>{ stats.mana+=5; goTo("deeperForest"); removeFromInventory("Mana Potion"); } }
+    ]
+};
+
+storyData["checkInventory"] = {
+    text:"Inventory: "+(inventory.join(", ")||"Nothing"),
+    choices:[
+        { text:"Back", action:()=>goTo(currentLocation) }
+    ]
+};
+
+// --- STORY FUNCTIONS ---
+function goTo(location){
+    currentLocation = location;
+    if(Math.random()<0.05) secretEncounter(); // 5% secret
+    const loc = storyData[location];
+    if(!loc) { gameOver("You wander into unknown darkness."); return; }
+    updateText(loc.text);
+    setChoices(loc.choices);
 }
 
-function hiddenChamber(){
-  storyProgress = "chamber";
-  updateText(`You discover a hidden chamber beneath the ruins. The air hums with magic. 
-  Two chests sit before you: one <b>golden</b>, one <b>shadowed</b>.`);
-  setChoices([
-    { text: "Open golden chest", action: goldenChest },
-    { text: "Open shadowed chest", action: shadowChest },
-    { text: "Leave the chamber", action: forestExit }
-  ]);
+// --- SPECIAL FUNCTIONS ---
+function fightShadow(){
+    if(stats.mana>0){
+        stats.mana-=2;
+        updateText("You cast a spell, scattering the shadow beast. You escape safely.");
+        setChoices([{ text:"Continue", action:()=>goTo("ruinsPath") }]);
+    } else {
+        stats.health-=3;
+        if(stats.health<=0) gameOver("Without magic, the shadow beast kills you.");
+        else setChoices([{ text:"Run", action:()=>goTo("ruinsPath") }]);
+    }
 }
 
 function goldenChest(){
-  addToInventory("Enchanted Amulet");
-  updateText(`Inside the golden chest you find an <b>Enchanted Amulet</b>! Your mana increases.`);
-  stats.mana += 3;
-  setChoices([
-    { text: "Proceed deeper", action: forestExit }
-  ]);
+    addToInventory("Enchanted Amulet");
+    stats.mana+=3;
+    updateText("Golden chest: Enchanted Amulet! Mana +3.");
+    setChoices([{ text:"Proceed", action:()=>goTo("forestClearing") }]);
 }
 
 function shadowChest(){
-  updateText(`A dark wraith emerges from the chest! You are struck with necrotic energy.`);
-  stats.health -= 5;
-  if(stats.health <= 0) gameOver("The wraith drains your life completely.");
-  else setChoices([
-    { text: "Flee to forest exit", action: forestExit },
-    { text: "Attempt to banish wraith", action: attemptBanish }
-  ]);
+    stats.health-=5;
+    if(stats.health<=0) gameOver("The shadow wraith drains your life.");
+    else setChoices([
+        { text:"Flee to clearing", action:()=>goTo("forestClearing") },
+        { text:"Attempt to banish wraith", action:attemptBanish }
+    ]);
 }
 
 function attemptBanish(){
-  if(inventory.includes("Enchanted Amulet")){
-    updateText(`The amulet glows brightly, banishing the wraith into the shadows!`);
-    setChoices([
-      { text: "Proceed to forest exit", action: forestExit }
-    ]);
-  } else {
-    stats.health -= 3;
-    if(stats.health <= 0) gameOver("Without protection, the wraith kills you.");
-    else setChoices([
-      { text: "Flee to forest exit", action: forestExit }
-    ]);
-  }
+    if(inventory.includes("Enchanted Amulet")){
+        updateText("Amulet glows, banishing the wraith!");
+        setChoices([{ text:"Proceed", action:()=>goTo("forestClearing") }]);
+    } else {
+        stats.health-=3;
+        if(stats.health<=0) gameOver("Without protection, wraith kills you.");
+        else setChoices([{ text:"Flee", action:()=>goTo("forestClearing") }]);
+    }
 }
 
-function fightShadow(){
-  if(stats.mana > 0){
-    stats.mana -= 2;
-    updateText(`You cast a bright spell, scattering the shadow beast. You escape safely.`);
-    setChoices([
-      { text: "Continue to ruins", action: ruinsPath }
-    ]);
-  } else {
-    stats.health -= 3;
-    if(stats.health <= 0) gameOver("Without magic, the shadow beast kills you.");
-    else setChoices([
-      { text: "Run to ruins", action: ruinsPath }
-    ]);
-  }
-}
-
-function drinkPotion(){
-  if(inventory.includes("Mana Potion")){
-    inventory = inventory.filter(i=>i!=="Mana Potion");
+// --- START GAME ---
+function start(){
+    inventory=[];
+    stats = { health:10, mana:5, stamina:5, courage:5, sanity:10 };
     updateInventoryDisplay();
-    stats.mana += 5;
-    updateText(`You drink the potion. Mana restored!`);
-    setChoices([
-      { text: "Proceed into forest", action: deeperForest }
-    ]);
-  } else {
-    updateText("You don't have a Mana Potion.");
-    setChoices([
-      { text: "Proceed into forest", action: deeperForest }
-    ]);
-  }
+    goTo("start");
 }
 
-function forestEdge(){
-  storyProgress = "edge";
-  updateText(`Walking along the edge of the forest, you find a quiet stream. The sunlight glimmers faintly.`);
-  setChoices([
-    { text: "Rest here for a moment", action: restByStream },
-    { text: "Venture into the forest anyway", action: forestEntrance }
-  ]);
-}
-
-function restByStream(){
-  stats.health += 2;
-  updateText("You rest by the stream. Your body feels rejuvenated.");
-  setChoices([
-    { text: "Enter forest", action: forestEntrance }
-  ]);
-}
-
-function forestExit(){
-  storyProgress = "exit";
-  updateText(`You finally see a clearing ahead. Light pierces the darkness. Your adventure ends here.`);
-  setChoices([
-    { text: "Play Again", action: start }
-  ]);
-}
-
-function gameOver(message){
-  updateText(`<b>GAME OVER:</b> ${message}`);
-  setChoices([
-    { text: "Restart", action: start }
-  ]);
-}
-
-// === Inventory Update Helper ===
-function updateInventoryDisplay(){
-  inventoryList.innerHTML = '';
-  inventory.forEach(item=>{
-    const li = document.createElement('li');
-    li.textContent = item;
-    inventoryList.appendChild(li);
-  });
-}
-
-// === Start Game ===
+// Launch game
 start();
